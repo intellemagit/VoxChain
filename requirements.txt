@@ -1,0 +1,5 @@
+livekit-api
+fastapi
+uvicorn
+pydantic
+python-dotenv~=1.0

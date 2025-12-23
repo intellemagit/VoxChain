@@ -7,3 +7,10 @@ class StartCallRequest(BaseModel):
     prompt_content: str = Field(..., description="Content for the agent prompt")
     timeout: int = Field(600, gt=0, description="Time in seconds before empty room closes")
     max_participants: Optional[int] = Field(None, gt=0, le=100, description="Limit max users")
+
+class EnterCallRequest(BaseModel):
+    room_name: str = Field(..., description="The room to join")
+    participant_name: str = Field(..., description="The name of the participant")
+
+class EndCallRequest(BaseModel):
+    room_name: str = Field(..., description="The room to end")

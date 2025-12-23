@@ -1,4 +1,5 @@
 import json
+import os
 import uuid
 from livekit import api
 from core.livekit import lk_api, SIP_OUTBOUND_TRUNK_ID
@@ -47,3 +48,35 @@ async def start_outbound_call(phone_number: str, prompt_content: str, room_name:
     )
 
     return room
+
+async def create_token(room_name: str, participant_name: str) -> str:
+    """
+    Creates a LiveKit access token for a participant to join a specific room.
+
+    Args:
+        room_name (str): The name of the room to join.
+        participant_name (str): The identity/name of the participant.
+
+    Returns:
+        str: A JWT access token.
+    """
+    token = api.AccessToken(
+        os.getenv("LIVEKIT_API_KEY"),
+        os.getenv("LIVEKIT_API_SECRET")
+    )
+    token.with_identity(participant_name)
+    token.with_name(participant_name)
+    token.with_grants(api.VideoGrants(
+        room_join=True,
+        room=room_name,
+    ))
+    return token.to_jwt()
+
+async def delete_room(room_name: str):
+    """
+    Deletes a room, effectively ending the call for all participants.
+
+    Args:
+        room_name (str): The name of the room to delete.
+    """
+    await lk_api.room.delete_room(api.DeleteRoomRequest(room=room_name))

@@ -52,3 +52,42 @@ curl -X POST "http://127.0.0.1:8000/api/start_call" \
      -H "Content-Type: application/json" \
      -d "{\"phone_number\": \"+1234567890\", \"prompt_content\": \"Hello from LiveKit!\"}"
 ```
+
+### Enter Call (Join Room)
+**Endpoint**: `POST /api/enter_call`
+
+Generates an access token for a participant to join an existing room via a client application (Web/Mobile). This does NOT initiate a phone call.
+
+**Body**:
+```json
+{
+  "room_name": "existing-room-name",
+  "participant_name": "user-identity"
+}
+```
+
+**Example**:
+```bash
+curl -X POST "http://127.0.0.1:8000/api/enter_call" \
+     -H "Content-Type: application/json" \
+     -d "{\"room_name\": \"outbound_call_123\", \"participant_name\": \"agent-007\"}"
+```
+
+### End Call
+**Endpoint**: `POST /api/end_call`
+
+Terminates the room and disconnects all participants.
+
+**Body**:
+```json
+{
+  "room_name": "room-to-delete"
+}
+```
+
+**Example**:
+```bash
+curl -X POST "http://127.0.0.1:8000/api/end_call" \
+     -H "Content-Type: application/json" \
+     -d "{\"room_name\": \"outbound_call_123\"}"
+```

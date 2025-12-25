@@ -208,4 +208,73 @@ class LiveKitManager:
                 print(f"Failed to download recording: {e}")
                 raise e
 
+    async def kick_participant(self, room_name: str, identity: str):
+        await self.lk_api.room.remove_participant(
+            api.RoomParticipantIdentity(
+                room=room_name,
+                identity=identity
+            )
+        )
+
+    async def mute_participant(self, room_name: str, identity: str, track_sid: str, muted: bool):
+        await self.lk_api.room.mute_published_track(
+            api.MuteRoomTrackRequest(
+                room=room_name,
+                identity=identity,
+                track_sid=track_sid,
+                muted=muted
+            )
+        )
+
+    async def send_alert(self, room_name: str, message: str, participant_identity: Optional[str] = None):
+        destination_identities = [participant_identity] if participant_identity else []
+        data_packet = json.dumps({"type": "alert", "message": message}).encode('utf-8')
+
+        await self.lk_api.room.send_data(
+            api.SendDataRequest(
+                room=room_name,
+                data=data_packet,
+                kind=1,  # 1 = RELIABLE, 0 = LOSSY
+                destination_identities=destination_identities
+            )
+        )
+
+    async def get_participant_identities(self, room_name: str) -> List[dict]:
+        """
+        Get a list of all participants in a room with their identities and tracks.
+        
+        Returns:
+            List of dicts with participant info:
+            [
+                {
+                    "identity": str,
+                    "name": str,
+                    "tracks": [
+                        {"sid": str, "type": str, "muted": bool, "source": str},
+                        ...
+                    ]
+                },
+                ...
+            ]
+        """
+        response = await self.lk_api.room.list_participants(
+            api.ListParticipantsRequest(room=room_name)
+        )
+        participants = []
+        for p in response.participants:
+            tracks = []
+            for track in p.tracks:
+                tracks.append({
+                    "sid": track.sid,
+                    "type": "audio" if track.type == 1 else "video" if track.type == 2 else "unknown",
+                    "muted": track.muted,
+                    "source": track.source.name if hasattr(track.source, 'name') else str(track.source)
+                })
+            participants.append({
+                "identity": p.identity,
+                "name": p.name,
+                "tracks": tracks
+            })
+        return participants
+
     

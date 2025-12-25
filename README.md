@@ -124,67 +124,237 @@ from livekit_lib.client import LiveKitManager
 lk_manager = LiveKitManager()
 ```
 
-### Creating a Token for a User
+---
+
+## API Reference
+
+### `create_token`
+
+Generate an authentication token for a participant to join a LiveKit room.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `room_name` | `str` | Yes | Name of the room to join |
+| `participant_name` | `str` | Yes | Unique identifier/display name for the participant |
+
+**Returns**: `str` - JWT token for client authentication
 
 ```python
 token = await lk_manager.create_token(
     room_name="my-room",
     participant_name="user-1"
 )
-print(f"Join Token: {token}")
 ```
 
-### Starting an Outbound SIP Call
+---
+
+### `start_outbound_call`
+
+Initiate an outbound SIP/PSTN call to a phone number. Creates a room, dispatches an agent, and connects the phone participant.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `phone_number` | `str` | Yes | Phone number to call (E.164 format, e.g., `+15551234567`) |
+| `prompt_content` | `str` | Yes | Content/context for the AI agent |
+| `room_name` | `str` | No | Custom room name (auto-generated if not provided) |
+| `timeout` | `int` | No | Room empty timeout in seconds (default: 600) |
+
+**Returns**: `Room` - LiveKit Room object with `name` and `sid` properties
+
+**Raises**: `ValueError` if SIP trunk is not configured or user is busy (SIP 486)
 
 ```python
 room = await lk_manager.start_outbound_call(
     phone_number="+15550101234",
     prompt_content="Hello, this is a test call.",
-    room_name="call-room-01"
+    room_name="call-room-01"  # Optional
 )
+print(f"Room SID: {room.sid}")
 ```
 
-### Recording a Call
+---
+
+### `delete_room`
+
+Delete a LiveKit room and disconnect all participants.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `room_name` | `str` | Yes | Name of the room to delete |
+
+**Returns**: `None`
 
 ```python
-# Record to S3 and wait for completion to download locally
+await lk_manager.delete_room(room_name="call-room-01")
+```
+
+---
+
+### `start_stream`
+
+Stream a room's audio/video to one or more RTMP destinations (YouTube, Twitch, etc.).
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `room_name` | `str` | Yes | Name of the room to stream |
+| `rtmp_urls` | `List[str]` | Yes | List of RTMP destination URLs |
+
+**Returns**: `None`
+
+# Use ngrok to test it (Might need to add a card method to acces TCP tunneling)
+
+---
+
+### `start_recording`
+
+Record a room's audio/video to an MP4 file. Supports S3 upload with automatic local download.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `room_name` | `str` | Yes | Name of the room to record |
+| `output_filepath` | `str` | No | Custom filename (auto-generated if not provided) |
+| `upload_to_s3` | `bool` | No | Upload to S3 (default: `True`). Requires AWS env vars. |
+| `wait_for_completion` | `bool` | No | Wait for recording to finish and download locally (default: `True`) |
+
+**Returns**: `None`
+
+**Side Effects**: When `wait_for_completion=True` and `upload_to_s3=True`, downloads the recording to `recordings/` folder.
+
+```python
+# Record to S3 and wait for download
 await lk_manager.start_recording(
     room_name="call-room-01",
     upload_to_s3=True,
     wait_for_completion=True
 )
 
-# Record locally (on the Egress server)
+# Record locally on the Egress server (no download)
 await lk_manager.start_recording(
     room_name="call-room-01",
     upload_to_s3=False,
-    output_filepath="local_recording.mp4"
+    output_filepath="my_recording.mp4"
 )
 ```
 
-### Streaming to RTMP
+---
 
+### `get_participant_identities`
+
+Get all participants in a room with their published tracks (useful for finding track SIDs for muting).
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `room_name` | `str` | Yes | Name of the room |
+
+**Returns**: `List[dict]` - List of participant info with tracks
 ```python
-await lk_manager.start_stream(
-    room_name="call-room-01",
-    rtmp_urls=["rtmp://live.twitch.tv/app/STREAM_KEY"]
-)
+[
+    {
+        "identity": "user-1",
+        "name": "John Doe",
+        "tracks": [
+            {"sid": "TR_abc123", "type": "audio", "muted": False, "source": "MICROPHONE"},
+            {"sid": "TR_xyz789", "type": "video", "muted": False, "source": "CAMERA"}
+        ]
+    }
+]
 ```
 
-### Managing Participants
+```python
+participants = await lk_manager.get_participant_identities(room_name="call-room-01")
+for p in participants:
+    print(f"{p['identity']}: {len(p['tracks'])} tracks")
+```
+
+---
+
+### `mute_participant`
+
+Mute or unmute a specific track (audio/video) for a participant.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `room_name` | `str` | Yes | Name of the room |
+| `identity` | `str` | Yes | Participant's identity |
+| `track_sid` | `str` | Yes | SID of the track to mute (get from `get_participant_identities`) |
+| `muted` | `bool` | Yes | `True` to mute, `False` to unmute |
+
+**Returns**: `None`
 
 ```python
-# Mute a participant's track
+# First, get the track SID
+participants = await lk_manager.get_participant_identities(room_name="call-room-01")
+audio_track_sid = participants[0]["tracks"][0]["sid"]
+
+# Mute the audio track
 await lk_manager.mute_participant(
     room_name="call-room-01",
-    identity="participant-identity",
-    track_sid="track-sid",
+    identity="user-1",
+    track_sid=audio_track_sid,
     muted=True
 )
+```
 
-# Kick a participant
+---
+
+### `kick_participant`
+
+Remove a participant from a room.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `room_name` | `str` | Yes | Name of the room |
+| `identity` | `str` | Yes | Participant's identity to kick |
+
+**Returns**: `None`
+
+```python
 await lk_manager.kick_participant(
     room_name="call-room-01",
-    identity="participant-identity"
+    identity="user-1"
 )
 ```
+
+---
+
+### `send_alert`
+
+Send a data packet (alert message) to participants. Only works for LiveKit SDK clients (not SIP/phone participants).
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `room_name` | `str` | Yes | Name of the room |
+| `message` | `str` | Yes | Alert message content |
+| `participant_identity` | `str` | No | Target participant (all participants if not specified) |
+
+**Returns**: `None`
+
+**Note**: Data packets are received by clients via the `dataReceived` event. SIP/phone participants cannot receive data packets.
+
+```python
+# Send to all participants
+await lk_manager.send_alert(
+    room_name="call-room-01",
+    message="Meeting ending in 5 minutes"
+)
+
+# Send to specific participant
+await lk_manager.send_alert(
+    room_name="call-room-01",
+    message="Please unmute yourself",
+    participant_identity="user-1"
+)
+```
+
+---
+
+### `close`
+
+Close the LiveKit API connection. Call this when done using the manager.
+
+**Returns**: `None`
+
+```python
+await lk_manager.close()
+```
+

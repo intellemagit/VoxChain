@@ -358,3 +358,61 @@ Close the LiveKit API connection. Call this when done using the manager.
 await lk_manager.close()
 ```
 
+Create a RetellManager class that provides granular call control (muting, streaming, recording) by leveraging Twilio for the telephony layer and Retell AI for the conversational intelligence. This hybrid approach overcomes the limitations of using the Retell SDK alone.
+
+User Review Required
+IMPORTANT
+
+Infrastructure Requirement: 
+start_outbound_call
+ requires a public-facing Webhook URL (https://myserver.com/connect-retell) that Twilio can hit when the call is answered. This webhook must handle the handoff to Retell (RegisterCall). This wrapper class initiates the call but does not host the webhook.
+
+Twilio Credentials: You will need TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and a TWILIO_PHONE_NUMBER in your 
+.env
+.
+
+## Retell AI  (Hybrid)
+
+The `retell_lib` package provides a `RetellManager` class that combines **Twilio** (for call control) and **Retell AI** (for conversational intelligence).
+
+### Features
+- **Outbound Calls**: Initiates calls via Twilio and connects them to Retell AI.
+- **Serverless**: No webhook server required. Uses TwiML injection.
+- **Call Control**: Supports muting, recording, and streaming via Twilio's API.
+
+### Usage
+
+```python
+from retell_lib.retell_client import RetellManager
+
+# Requires env vars: TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_PHONE_NUMBER, RETELL_API_KEY, RETELL_AGENT_ID
+manager = RetellManager()
+
+# 1. Start Call
+call_sid = manager.start_outbound_call("+15551234567")
+
+# 2. Mute User (Stop AI from hearing user)
+manager.mute_participant(call_sid, identity="user", track_sid="audio", muted=True)
+
+# 3. Start Recording
+manager.start_recording(call_sid)
+
+# 4. End Call
+manager.delete_room(call_sid)
+```
+
+### Multi-Participant Support (Alternative Approach)
+
+The current implementation uses a 1-to-1 call structure (User <-> AI). If you need to support multiple human participants in the same call (e.g. User A, User B, and AI), you must use **Twilio Conferences**.
+
+**Conference Architecture:**
+1.  **Room**: Create a Twilio Conference.
+2.  **Participants**: Dial users into the Conference.
+3.  **AI Connection**: Dial a "dummy" participant into the Conference and attach the Retell Stream to that participant.
+
+**Trade-offs**:
+- **Pros**: Allows muting/kicking specific participants by `CallSid`.
+- **Cons**: Significantly higher complexity and cost (requires 2+ active call legs).
+
+This library implements the simpler 1-to-1 approach for efficiency.
+

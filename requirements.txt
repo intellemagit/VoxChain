@@ -1,3 +1,6 @@
 livekit-api>=1.1.0
 python-dotenv>=1.0.0
 boto3>=1.28.0
+twilio
+retell-sdk
+requests

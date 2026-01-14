@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "intellema-vdk"
+version = "0.1.0"
+description = "A Voice Development Kit for different Voice Agent Platforms"
+readme = "README.md"
+requires-python = ">=3.8"
+license = {file = "LICENSE"}
+authors = [
+  {name = "Intellema"},
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "livekit-api>=1.1.0",
+    "python-dotenv>=1.0.0",
+    "boto3>=1.28.0",
+    "twilio",
+    "retell-sdk",
+    "requests"
+]
+
+[project.urls]
+"Homepage" = "https://github.com/yourusername/intellema-vdk"
+"Bug Tracker" = "https://github.com/yourusername/intellema-vdk/issues"
+
+[tool.setuptools.packages.find]
+include = ["intellema_vdk*"]

@@ -1,6 +1,6 @@
-# Open Source LiveKit Wrapper
+# Intellema VDK
 
-This project provides a Python wrapper around the LiveKit API, simplifying common tasks such as managing rooms, handling participants, initiating SIP calls, and recording sessions to AWS S3.
+Intellema VDK is a unified Voice Development Kit designed to simplify the integration and management of various voice agent platforms. It provides a consistent, factory-based API to interact with providers like LiveKit and Retell AI, enabling developers to build scalable voice applications with ease. Whether you need real-time streaming, outbound calling, or participant management, Intellema VDK abstracts the complexity into a single, intuitive interface.
 
 ## Features
 
@@ -13,9 +13,6 @@ This project provides a Python wrapper around the LiveKit API, simplifying commo
 ## Prerequisites
 
 - Python 3.8+
-- A running LiveKit Server
-- Redis (if using multi-node LiveKit setup)
-- An AWS Account (for recordings)
 - A SIP Provider (for outbound calls)
 
 ## Installation
@@ -62,14 +59,6 @@ from intellema_vdk import start_outbound_call
 await start_outbound_call("livekit", phone_number="+1...")
 ```
 
-### Advanced Usage
-
-You can still access the individual managers if you need more granular control:
-
-```python
-from intellema_vdk.livekit_lib.client import LiveKitManager
-from intellema_vdk.retell_lib.retell_client import RetellManager
-```
 
 ## Configuration
 

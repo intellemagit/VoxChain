@@ -26,27 +26,34 @@ class RetellManager:
         self.twilio_client = Client(self.twilio_account_sid, self.twilio_auth_token)
         self.retell_client = Retell(api_key=self.retell_api_key)
 
-    def start_outbound_call(self, phone_number: str, prompt_content: str = None, room_name: str = None) -> str:
+    def start_outbound_call(self, phone_number: str, prompt_content: str = None, call_id: str = None) -> str:
         """
         Initiates an outbound call using Twilio.
         Registers the call with Retell first, then uses TwiML to connect Twilio to Retell's WebSocket.
+        
+        Args:
+            phone_number: The number to call.
+            prompt_content: Content to override the agent's prompt (passed as 'prompt_content' dynamic variable).
+            call_id: Custom ID for metadata (optional).
         """
         # 1. Register call with Retell to get the WebSocket URL
-        register_response = self.retell_client.call.register(
+        register_response = self.retell_client.call.register_phone_call(
             agent_id=self.retell_agent_id,
-            audio_websocket_protocol="twilio",
-            audio_encoding="mulaw",
-            sample_rate=8000,
+            direction="outbound",
             from_number=self.twilio_number,
             to_number=phone_number,
-            metadata={"room_name": room_name} if room_name else None
+            metadata={"call_id": call_id} if call_id else None,
+            retell_llm_dynamic_variables={"prompt_content": prompt_content} if prompt_content else None
         )
 
-        # 2. Construct TwiML to connect Twilio to Retell
+        # 2. Construct the audio WebSocket URL using the call_id
+        audio_websocket_url = f"wss://api.retellai.com/audio-websocket/{register_response.call_id}"
+
+        # 3. Construct TwiML to connect Twilio to Retell
         # Note: We construct the XML string manually to avoid extra dependencies like twilio.twiml
         twiml = f"""<Response>
             <Connect>
-                <Stream url="{register_response.audio_websocket_url}" />
+                <Stream url="{audio_websocket_url}" />
             </Connect>
         </Response>"""
 

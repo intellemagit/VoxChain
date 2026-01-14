@@ -31,9 +31,9 @@ class LiveKitManager:
     async def close(self):
         await self.lk_api.aclose()
 
-    async def start_outbound_call(self, phone_number: str, prompt_content: str, room_name: str = None, timeout: int = 600):
-        if not room_name:
-            room_name = f"outbound_call_{uuid.uuid4().hex[:12]}"
+    async def start_outbound_call(self, phone_number: str, prompt_content: str, call_id: str = None, timeout: int = 600):
+        if not call_id:
+            call_id = f"outbound_call_{uuid.uuid4().hex[:12]}"
 
         metadata = json.dumps({
             "phone_number": phone_number,
@@ -43,7 +43,7 @@ class LiveKitManager:
         # 1. Create room with metadata
         room = await self.lk_api.room.create_room(
             api.CreateRoomRequest(
-                name=room_name,
+                name=call_id,
                 empty_timeout=timeout,
                 metadata=metadata
             )
@@ -52,7 +52,7 @@ class LiveKitManager:
         # 2. Dispatch agent
         await self.lk_api.agent_dispatch.create_dispatch(
             api.CreateAgentDispatchRequest(
-                room=room_name,
+                room=call_id,
                 agent_name="outbound-caller",
                 metadata=metadata
             )
@@ -67,7 +67,7 @@ class LiveKitManager:
         try:
             await self.lk_api.sip.create_sip_participant(
                 api.CreateSIPParticipantRequest(
-                    room_name=room_name,
+                    room_name=call_id,
                     sip_trunk_id=self.sip_trunk_id,
                     sip_call_to=phone_number,
                     participant_identity=sip_participant_identity,
@@ -79,29 +79,29 @@ class LiveKitManager:
             if "Busy Here" in str(e) or "486" in str(e):
                 print(f"Call failed: User is busy ({phone_number})")
                 # We might want to clean up the room if the call failed
-                await self.delete_room(room_name)
+                await self.delete_room(call_id)
                 raise ValueError("User is busy")
             raise e
 
         return room
 
-    async def create_token(self, room_name: str, participant_name: str) -> str:
+    async def create_token(self, call_id: str, participant_name: str) -> str:
         token = api.AccessToken(self.api_key, self.api_secret)
         token.with_identity(participant_name)
         token.with_name(participant_name)
         token.with_grants(api.VideoGrants(
             room_join=True,
-            room=room_name,
+            room=call_id,
         ))
         return token.to_jwt()
 
-    async def delete_room(self, room_name: str):
-        await self.lk_api.room.delete_room(api.DeleteRoomRequest(room=room_name))
+    async def delete_room(self, call_id: str):
+        await self.lk_api.room.delete_room(api.DeleteRoomRequest(room=call_id))
 
-    async def start_stream(self, room_name: str, rtmp_urls: List[str]):
+    async def start_stream(self, call_id: str, rtmp_urls: List[str]):
         await self.lk_api.egress.start_room_composite_egress(
             api.RoomCompositeEgressRequest(
-                room_name=room_name,
+                room_name=call_id,
                 layout="speaker",
                 stream_outputs=[
                     api.StreamOutput(
@@ -112,18 +112,18 @@ class LiveKitManager:
             )
         )
 
-    async def start_recording(self, room_name: str, output_filepath: Optional[str] = None, upload_to_s3: bool = True, wait_for_completion: bool = True):
+    async def start_recording(self, call_id: str, output_filepath: Optional[str] = None, upload_to_s3: bool = True, wait_for_completion: bool = True):
         """
         Start recording a room.
         
         Args:
-            room_name: Name of the room to record.
+            call_id: Name of the room/call to record.
             output_filepath: Optional path/filename for the recording.
             upload_to_s3: If True, uploads to S3 (requires env vars). If False, saves locally on Egress server.
             wait_for_completion: If True, waits for the recording to finish and downloads it locally (if upload_to_s3 is True).
         """
         file_output = None
-        filename = output_filepath if output_filepath else f"{room_name}-{uuid.uuid4().hex[:6]}.mp4"
+        filename = output_filepath if output_filepath else f"{call_id}-{uuid.uuid4().hex[:6]}.mp4"
 
         if upload_to_s3:
             access_key = os.getenv("AWS_ACCESS_KEY_ID")
@@ -154,7 +154,7 @@ class LiveKitManager:
         
         egress_info = await self.lk_api.egress.start_room_composite_egress(
             api.RoomCompositeEgressRequest(
-                room_name=room_name,
+                room_name=call_id,
                 layout="grid",
                 preset=api.EncodingOptionsPreset.H264_720P_30,
                 file_outputs=[file_output]
@@ -208,38 +208,38 @@ class LiveKitManager:
                 print(f"Failed to download recording: {e}")
                 raise e
 
-    async def kick_participant(self, room_name: str, identity: str):
+    async def kick_participant(self, call_id: str, identity: str):
         await self.lk_api.room.remove_participant(
             api.RoomParticipantIdentity(
-                room=room_name,
+                room=call_id,
                 identity=identity
             )
         )
 
-    async def mute_participant(self, room_name: str, identity: str, track_sid: str, muted: bool):
+    async def mute_participant(self, call_id: str, identity: str, track_sid: str, muted: bool):
         await self.lk_api.room.mute_published_track(
             api.MuteRoomTrackRequest(
-                room=room_name,
+                room=call_id,
                 identity=identity,
                 track_sid=track_sid,
                 muted=muted
             )
         )
 
-    async def send_alert(self, room_name: str, message: str, participant_identity: Optional[str] = None):
+    async def send_alert(self, call_id: str, message: str, participant_identity: Optional[str] = None):
         destination_identities = [participant_identity] if participant_identity else []
         data_packet = json.dumps({"type": "alert", "message": message}).encode('utf-8')
 
         await self.lk_api.room.send_data(
             api.SendDataRequest(
-                room=room_name,
+                room=call_id,
                 data=data_packet,
                 kind=1,  # 1 = RELIABLE, 0 = LOSSY
                 destination_identities=destination_identities
             )
         )
 
-    async def get_participant_identities(self, room_name: str) -> List[dict]:
+    async def get_participant_identities(self, call_id: str) -> List[dict]:
         """
         Get a list of all participants in a room with their identities and tracks.
         
@@ -258,7 +258,7 @@ class LiveKitManager:
             ]
         """
         response = await self.lk_api.room.list_participants(
-            api.ListParticipantsRequest(room=room_name)
+            api.ListParticipantsRequest(room=call_id)
         )
         participants = []
         for p in response.participants:

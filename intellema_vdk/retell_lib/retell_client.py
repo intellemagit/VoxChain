@@ -26,64 +26,122 @@ class RetellManager:
         self.twilio_client = Client(self.twilio_account_sid, self.twilio_auth_token)
         self.retell_client = Retell(api_key=self.retell_api_key)
 
-    def start_outbound_call(self, phone_number: str, prompt_content: str = None, call_id: str = None) -> str:
+    def import_phone_number(self, termination_uri: str = None, outbound_agent_id: str = None, inbound_agent_id: str = None, nickname: str = None, sip_trunk_auth_username: str = None, sip_trunk_auth_password: str = None):
         """
-        Initiates an outbound call using Twilio.
-        Registers the call with Retell first, then uses TwiML to connect Twilio to Retell's WebSocket.
+        Import/register your Twilio phone number with Retell.
+        This is required before you can make outbound calls using the phone number.
         
         Args:
-            phone_number: The number to call.
-            prompt_content: Content to override the agent's prompt (passed as 'prompt_content' dynamic variable).
-            call_id: Custom ID for metadata (optional).
+            termination_uri: Twilio SIP trunk termination URI (e.g., "yourtrunk.pstn.twilio.com").
+                           If not provided, will try to use a default format.
+            outbound_agent_id: Agent ID to use for outbound calls. Defaults to self.retell_agent_id.
+            inbound_agent_id: Agent ID to use for inbound calls. Defaults to None (no inbound).
+            nickname: Optional nickname for the phone number.
+            sip_trunk_auth_username: Username for SIP trunk authentication (if using credential list).
+            sip_trunk_auth_password: Password for SIP trunk authentication (if using credential list).
+        
+        Returns:
+            The phone number registration response from Retell.
         """
-        # 1. Register call with Retell to get the WebSocket URL
-        register_response = self.retell_client.call.register_phone_call(
-            agent_id=self.retell_agent_id,
-            direction="outbound",
-            from_number=self.twilio_number,
-            to_number=phone_number,
-            metadata={"call_id": call_id} if call_id else None,
-            retell_llm_dynamic_variables={"prompt_content": prompt_content} if prompt_content else None
-        )
-
-        # 2. Construct the audio WebSocket URL using the call_id
-        audio_websocket_url = f"wss://api.retellai.com/audio-websocket/{register_response.call_id}"
-
-        # 3. Construct TwiML to connect Twilio to Retell
-        # Note: We construct the XML string manually to avoid extra dependencies like twilio.twiml
-        twiml = f"""<Response>
-            <Connect>
-                <Stream url="{audio_websocket_url}" />
-            </Connect>
-        </Response>"""
-
-        # 3. Create the call with Twilio using the generated TwiML
-        call = self.twilio_client.calls.create(
-            to=phone_number,
-            from_=self.twilio_number,
-            twiml=twiml
-        )
-        return call.sid
-
-    def delete_room(self, room_name: str):
-        """
-        Ends the call. 'room_name' is interpreted as the Twilio Call SID.
-        Ends both the Retell agent and the Twilio call.
-        """
+        # Build the import kwargs
+        import_kwargs = {
+            "phone_number": self.twilio_number,
+        }
+        
+        # Add termination URI if provided
+        if termination_uri:
+            import_kwargs["termination_uri"] = termination_uri
+        
+        # Add SIP credentials if provided
+        if sip_trunk_auth_username and sip_trunk_auth_password:
+            import_kwargs["sip_trunk_auth_username"] = sip_trunk_auth_username
+            import_kwargs["sip_trunk_auth_password"] = sip_trunk_auth_password
+        
+        # Set outbound agent (required for outbound calls)
+        if outbound_agent_id:
+            import_kwargs["outbound_agent_id"] = outbound_agent_id
+        elif self.retell_agent_id:
+            import_kwargs["outbound_agent_id"] = self.retell_agent_id
+        
+        # Set inbound agent if provided
+        if inbound_agent_id:
+            import_kwargs["inbound_agent_id"] = inbound_agent_id
+        
+        # Add nickname if provided
+        if nickname:
+            import_kwargs["nickname"] = nickname
+        
         try:
-            # Attempt to end Retell call if mapped, but primarily hang up Twilio
-            # Note: Retell SDK end_call requires retell call id, not twilio sid.
-            # If we don't have the mapping, hanging up Twilio is the most effective way to stop everything.
-            try:
-                self.retell_client.call.end_call(call_id=room_name)
-            except Exception:
-                pass # Ignore if Retell call fails (e.g. invalid ID), ensure Twilio hangs up
-            
-            self.twilio_client.calls(room_name).update(status='completed')
+            response = self.retell_client.phone_number.import_(**import_kwargs)
+            print(f"✓ Phone number {self.twilio_number} successfully imported to Retell!")
+            print(f"  Phone Number: {response.phone_number}")
+            print(f"  Type: {response.phone_number_type}")
+            if hasattr(response, 'outbound_agent_id') and response.outbound_agent_id:
+                print(f"  Outbound Agent: {response.outbound_agent_id}")
+            if hasattr(response, 'inbound_agent_id') and response.inbound_agent_id:
+                print(f"  Inbound Agent: {response.inbound_agent_id}")
+            return response
         except Exception as e:
-            print(f"Error ending call {room_name}: {e}")
+            print(f"✗ Error importing phone number: {e}")
+            print(f"\nNote: If you're using Twilio, you may need to:")
+            print(f"  1. Create an Elastic SIP Trunk in Twilio console")
+            print(f"  2. Provide the termination_uri parameter (e.g., 'yourtrunk.pstn.twilio.com')")
+            print(f"  3. Or purchase the number directly through Retell dashboard")
+            raise
 
-    def start_stream(self, room_name: str, rtmp_urls: List[str]):
+
+    def start_outbound_call(self, phone_number: str, prompt_content: str = None, call_id: str = None) -> str:
+        call_kwargs = {
+            "from_number": self.twilio_number,
+            "to_number": phone_number,
+            "override_agent_id": self.retell_agent_id,
+        }
+    
+        if call_id:
+            call_kwargs["metadata"] = {"call_id": call_id}
+    
+    # Only set up dynamic variables if we have a custom prompt
+        if prompt_content:
+            enhanced_prompt = (
+                f"{prompt_content}\n\n"
+                "SYSTEM INSTRUCTION: Continually check the dynamic variable {{force_end}}. "
+                "If {{force_end}} == 'true, you must IMMEDIATELY say goodbye and activate your end_call tool to terminate the call."
+            )
+            call_kwargs["retell_llm_dynamic_variables"] = {
+                "prompt_content": enhanced_prompt,
+                "force_end": "false"
+            }
+    
+        call_response = self.retell_client.call.create_phone_call(**call_kwargs)
+    
+        print(f"Call created successfully!")
+        print(f"Retell Call ID: {call_response.call_id}")
+        print(f"Call Status: {call_response.call_status}")
+    
+        return call_response.call_id
+
+    def delete_room(self, call_id: str):
+        try:
+            call_data = self.retell_client.call.retrieve(call_id)
+            print(f"Current call status: {call_data.call_status}")
+
+            if call_data.call_status in ['registered', 'ongoing', 'dialing']:
+                print(f"Triggering end for Retell call {call_id}...")
+
+                self.retell_client.call.update(
+                    call_id,
+                    override_dynamic_variables={"force_end": "true"}
+                )
+
+                print("✓ force_end override sent to Retell API")
+            else:
+                print(f"Call already ended: {call_data.call_status}")
+
+        except Exception as e:
+            print(f"Error ending call {call_id}: {e}")
+            raise
+
+    def start_stream(self, call_id: str, rtmp_urls: List[str]):
         """
         Starts a Twilio Media Stream.
         Note: Twilio streams are WebSocket-based. If rtmp_urls contains a WSS URL, it will work.
@@ -91,16 +149,16 @@ class RetellManager:
         if not rtmp_urls:
             raise ValueError("No stream URLs provided")
             
-        self.twilio_client.calls(room_name).streams.create(
+        self.twilio_client.calls(call_id).streams.create(
             url=rtmp_urls[0]
         )
 
-    def start_recording(self, room_name: str, output_filepath: Optional[str] = None, upload_to_s3: bool = True, wait_for_completion: bool = True):
+    def start_recording(self, call_id: str, output_filepath: Optional[str] = None, upload_to_s3: bool = True, wait_for_completion: bool = True):
         """
         Triggers a recording on the active Twilio call.
         
         Args:
-            room_name: The Twilio Call SID.
+            call_id: The Twilio Call SID.
             output_filepath: Optional filename for the recording.
             upload_to_s3: If True, uploads to S3.
             wait_for_completion: If True, waits for recording to finish and then uploads.
@@ -110,7 +168,7 @@ class RetellManager:
         """
         
         # Start Twilio recording
-        recording = self.twilio_client.calls(room_name).recordings.create()
+        recording = self.twilio_client.calls(call_id).recordings.create()
         print(f"Recording started: {recording.sid}")
         
         if not wait_for_completion:
@@ -147,7 +205,7 @@ class RetellManager:
         if not access_key or not secret_key or not bucket:
             raise ValueError("AWS credentials (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_S3_BUCKET) are required for S3 upload.")
         
-        filename = output_filepath if output_filepath else f"{room_name}-{uuid.uuid4().hex[:6]}.mp3"
+        filename = output_filepath if output_filepath else f"{call_id}-{uuid.uuid4().hex[:6]}.mp3"
         
         s3 = boto3.client(
             's3',
@@ -170,20 +228,20 @@ class RetellManager:
         
         return recording.sid
 
-    def mute_participant(self, room_name: str, identity: str, track_sid: str, muted: bool):
+    def mute_participant(self, call_id: str, identity: str, track_sid: str, muted: bool):
         """
         Mutes the participant on the Twilio call.
         This prevents audio from reaching the Retell AI.
         """
-        self.twilio_client.calls(room_name).update(muted=muted)
+        self.twilio_client.calls(call_id).update(muted=muted)
 
-    def kick_participant(self, room_name: str, identity: str):
+    def kick_participant(self, call_id: str, identity: str):
         """
         Alias for delete_room (hangup).
         """
-        self.delete_room(room_name)
+        self.delete_room(call_id)
 
-    def send_alert(self, room_name: str, message: str, participant_identity: Optional[str] = None):
+    def send_alert(self, call_id: str, message: str, participant_identity: Optional[str] = None):
         """
         Not fully supported in this hybrid model
         """

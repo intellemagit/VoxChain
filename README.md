@@ -76,4 +76,29 @@ RETELL_API_KEY=your-retell-key
 RETELL_AGENT_ID=your-agent-id
 ```
 
+## Retell Setup
+
+**Important:** Before initiating calls with Retell, you must register your Twilio phone number with Retell. This binds your agent to the number and allows Retell to handle the call flow.
+
+You can register your number in two ways:
+
+1.  **Using the Helper Script:**
+    We provide an interactive script to guide you through the process:
+    ```bash
+    python import_phone_number.py
+    ```
+
+2.  **Programmatically:**
+    ```python
+    from intellema_vdk.retell_lib.retell_client import RetellManager
+    
+    manager = RetellManager()
+    # Optional: Pass termination_uri if you have a SIP trunk
+    manager.import_phone_number(nickname="My Twilio Number")
+    ```
+
+## Notes
+
+- **Retell `delete_room` Limitation**: The `delete_room` method for Retell relies on updating dynamic variables during the conversation loop. As a result, it **only works if the user speaks something** which triggers the agent to check the variable and terminate the call.
+
 

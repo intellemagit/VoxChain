@@ -1,9 +1,4 @@
 from typing import Optional, List, Any
-import os
-from dotenv import load_dotenv
-
-# Load environment variables
-load_dotenv()
 
 from .livekit_lib.client import LiveKitManager
 from .retell_lib.retell_client import RetellManager

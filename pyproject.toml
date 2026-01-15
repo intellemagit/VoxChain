@@ -26,9 +26,7 @@ dependencies = [
     "requests"
 ]
 
-[project.urls]
-"Homepage" = "https://github.com/yourusername/intellema-vdk"
-"Bug Tracker" = "https://github.com/yourusername/intellema-vdk/issues"
+
 
 [tool.setuptools.packages.find]
 include = ["intellema_vdk*"]

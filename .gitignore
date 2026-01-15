@@ -6,3 +6,7 @@ __pycache__/
 tests
 
 recordings
+
+intellema_vdk.egg-info
+
+dist

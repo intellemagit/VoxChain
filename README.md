@@ -74,6 +74,7 @@ TWILIO_AUTH_TOKEN=your-token
 TWILIO_PHONE_NUMBER=your-number
 RETELL_API_KEY=your-retell-key
 RETELL_AGENT_ID=your-agent-id
+OPENAI_API_KEY=your-openai-key
 ```
 
 

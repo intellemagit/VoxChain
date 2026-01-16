@@ -1,15 +1,18 @@
 import os
+import logging
 from typing import Optional
 from openai import OpenAI
 from dotenv import load_dotenv
 
 load_dotenv()
+logger = logging.getLogger(__name__)
 
 class SpeechToText:
     def __init__(self, api_key: Optional[str] = None):
         self.api_key = api_key or os.getenv("OPENAI_API_KEY")
 
         if not self.api_key:
+            logger.error("OPENAI_API_KEY not found.")
             raise ValueError("OPENAI_API_KEY must be set in your .env file or passed to the constructor.")
         
         self.openai_client = OpenAI(api_key=self.api_key)
@@ -26,7 +29,9 @@ class SpeechToText:
         Returns:
             The transcribed text as a string.
         """
+        logger.info(f"Starting transcription for file: {file_path}")
         if not os.path.exists(file_path):
+            logger.error(f"Audio file not found at: {file_path}")
             raise FileNotFoundError(f"Audio file not found at: {file_path}")
 
         try:
@@ -35,10 +40,11 @@ class SpeechToText:
                     model=model,
                     file=audio_file
                 )
+            logger.info(f"Successfully transcribed file: {file_path}")
 
             return transcript.text
         except Exception as e:
-            print(f"Error during transcription: {e}")
+            logger.error(f"Error during transcription for file {file_path}: {e}", exc_info=True)
             raise 
 
 # Example of how to use the STT class:

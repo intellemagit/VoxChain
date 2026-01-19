@@ -5,3 +5,4 @@ boto3>=1.28.0
 twilio
 retell-sdk
 requests
+httpx
